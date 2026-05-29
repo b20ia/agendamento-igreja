@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Agendamento;
+use App\Models\Setting;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -39,6 +40,51 @@ class WhatsAppService
             $agendamento->equipe,
             $agendamento->horario
         ));
+    }
+
+    public function sendAdminBookingNotification(Agendamento $agendamento): bool
+    {
+        return $this->sendToAdmin(sprintf(
+            "Nova inscrição na vigília\n\nEquipe: %s\nResponsável: %s\nTelefone: %s\nDia: %s\nHorário: %s",
+            $agendamento->equipe,
+            $agendamento->responsavel,
+            $agendamento->telefone,
+            $this->formatDay($agendamento->dia),
+            $agendamento->horario
+        ));
+    }
+
+    public function sendAdminCancellationNotification(Agendamento $agendamento): bool
+    {
+        return $this->sendToAdmin(sprintf(
+            "Inscrição cancelada na vigília\n\nEquipe: %s\nResponsável: %s\nTelefone: %s\nDia: %s\nHorário: %s\nMotivo: %s",
+            $agendamento->equipe,
+            $agendamento->responsavel,
+            $agendamento->telefone,
+            $this->formatDay($agendamento->dia),
+            $agendamento->horario,
+            $agendamento->motivo_cancelamento ?: 'Não informado'
+        ));
+    }
+
+    private function sendToAdmin(string $message): bool
+    {
+        $adminPhone = config('services.whatsapp.admin_phone');
+
+        try {
+            $adminPhone = Setting::getValue('whatsapp_admin_phone', $adminPhone);
+        } catch (\Throwable $exception) {
+            Log::warning('WhatsApp admin phone setting could not be loaded.', [
+                'message' => $exception->getMessage(),
+            ]);
+        }
+
+        if (!$adminPhone) {
+            Log::info('WhatsApp admin phone not configured; admin notification skipped.');
+            return false;
+        }
+
+        return $this->send($adminPhone, $message);
     }
 
     private function send(string $phone, string $message): bool

@@ -84,6 +84,7 @@ QUEUE_CONNECTION=database
 WHATSAPP_SERVICE_URL=https://url-do-servico-whatsapp
 WHATSAPP_SERVICE_TOKEN=um-token-forte
 WHATSAPP_SERVICE_TIMEOUT=30
+WHATSAPP_ADMIN_PHONE=5585999999999
 ```
 
 Para gerar o `APP_KEY`, rode localmente:

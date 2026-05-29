@@ -35,9 +35,14 @@ return [
         ],
     ],
 
+    'admin' => [
+        'password' => env('ADMIN_PASSWORD'),
+    ],
+
     'whatsapp' => [
         'url' => env('WHATSAPP_SERVICE_URL'),
         'token' => env('WHATSAPP_SERVICE_TOKEN'),
         'timeout' => env('WHATSAPP_SERVICE_TIMEOUT', 5),
+        'admin_phone' => env('WHATSAPP_ADMIN_PHONE'),
     ],
 ];

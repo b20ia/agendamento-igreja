@@ -16,6 +16,7 @@
 
             <nav class="site-nav" aria-label="Navegação principal">
                 <a href="{{ route('agendamento.index') }}" class="{{ request()->routeIs('agendamento.index') ? 'active' : '' }}">Início</a>
+                <a href="{{ route('admin.index') }}" class="{{ request()->routeIs('admin.*') ? 'active' : '' }}">Admin</a>
             </nav>
         </div>
     </header>

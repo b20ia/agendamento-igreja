@@ -8,12 +8,19 @@ class SistemaAgendamento {
         this.horariosDisponiveis = {};
         this.agendamentos = {};
         this.horariosCarregados = false;
+        this.notificacoesProximidadePendentes = new Set();
         
         // Mapping de dias para português
         this.diasNomes = {
             'sexta': 'Sexta-feira',
             'sabado': 'Sábado',
             'domingo': 'Domingo'
+        };
+
+        this.datasEvento = {
+            'sexta': '2026-07-24',
+            'sabado': '2026-07-25',
+            'domingo': '2026-07-26'
         };
 
         // Armazena dados do agendamento atual
@@ -507,15 +514,18 @@ class SistemaAgendamento {
 
         this.agendamentos[diaAtual].forEach((agendamento) => {
             if (agendamento.cancelado || agendamento.notificacoes_enviadas?.proximidade) return;
+            if (this.notificacoesProximidadePendentes.has(agendamento.id)) return;
 
             const [horas, minutos] = agendamento.horario.split(':');
-            const agendamentoTime = new Date();
-            agendamentoTime.setHours(parseInt(horas), parseInt(minutos), 0);
+            const [ano, mes, dia] = this.datasEvento[diaAtual].split('-').map(Number);
+            const agendamentoTime = new Date(ano, mes - 1, dia, parseInt(horas), parseInt(minutos), 0);
 
             const diferenca = (agendamentoTime - agora) / 1000 / 60; // em minutos
 
             // Se está entre 10 e 15 minutos antes
             if (diferenca > 10 && diferenca <= 15) {
+                this.notificacoesProximidadePendentes.add(agendamento.id);
+
                 // Enviar notificação de proximidade via API
                 fetch('/api/notificacao-proximidade', {
                     method: 'POST',
@@ -526,19 +536,36 @@ class SistemaAgendamento {
                     body: JSON.stringify({
                         id: agendamento.id,
                     }),
-                }).catch(error => console.error('Erro ao enviar notificação de proximidade:', error));
+                })
+                    .then((response) => response.json())
+                    .then((result) => {
+                        if (result.sucesso) {
+                            agendamento.notificacoes_enviadas = {
+                                ...(agendamento.notificacoes_enviadas || {}),
+                                proximidade: new Date().toISOString(),
+                            };
+                        } else {
+                            this.notificacoesProximidadePendentes.delete(agendamento.id);
+                        }
+                    })
+                    .catch((error) => {
+                        this.notificacoesProximidadePendentes.delete(agendamento.id);
+                        console.error('Erro ao enviar notificação de proximidade:', error);
+                    });
             }
         });
     }
 
     obterDiaAtual() {
         const hoje = new Date();
-        const dia = hoje.getDay();
+        const ano = hoje.getFullYear();
+        const mes = String(hoje.getMonth() + 1).padStart(2, '0');
+        const dia = String(hoje.getDate()).padStart(2, '0');
+        const dataAtual = `${ano}-${mes}-${dia}`;
 
-        // 5 = sexta, 6 = sábado, 0 = domingo
-        if (dia === 5) return 'sexta';
-        if (dia === 6) return 'sabado';
-        if (dia === 0) return 'domingo';
+        if (dataAtual === this.datasEvento.sexta) return 'sexta';
+        if (dataAtual === this.datasEvento.sabado) return 'sabado';
+        if (dataAtual === this.datasEvento.domingo) return 'domingo';
 
         return null;
     }

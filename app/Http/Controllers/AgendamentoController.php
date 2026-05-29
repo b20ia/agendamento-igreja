@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AdminNotification;
 use App\Models\Agendamento;
 use App\Services\WhatsAppService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class AgendamentoController extends Controller
 {
@@ -81,6 +83,9 @@ class AgendamentoController extends Controller
                 $agendamento->registrarNotificacao('confirmacao');
             }
 
+            $this->whatsApp->sendAdminBookingNotification($agendamento);
+            $this->createAdminNotification($agendamento, 'booking');
+
             return response()->json([
                 'sucesso' => true,
                 'mensagem' => 'Agendamento realizado com sucesso!',
@@ -119,6 +124,9 @@ class AgendamentoController extends Controller
             $agendamento->registrarNotificacao('cancelamento');
         }
 
+        $this->whatsApp->sendAdminCancellationNotification($agendamento);
+        $this->createAdminNotification($agendamento, 'cancellation');
+
         return response()->json([
             'sucesso' => true,
             'mensagem' => 'Agendamento cancelado com sucesso!',
@@ -141,6 +149,13 @@ class AgendamentoController extends Controller
             return response()->json([
                 'sucesso' => false,
             ], 404);
+        }
+
+        if ($agendamento->notificacaoJaEnviada('proximidade')) {
+            return response()->json([
+                'sucesso' => true,
+                'mensagem' => 'Notificação de proximidade já enviada.',
+            ]);
         }
 
         if ($this->whatsApp->sendProximityReminder($agendamento)) {
@@ -219,5 +234,46 @@ class AgendamentoController extends Controller
                 Carbon::create(2026, 7, 26, 15, 0, 0, 'America/Fortaleza'),
                 false
             );
+    }
+
+    private function createAdminNotification(Agendamento $agendamento, string $type): void
+    {
+        $title = $type === 'booking' ? 'Nova inscrição' : 'Inscrição cancelada';
+        $message = $type === 'booking'
+            ? sprintf(
+                '%s se inscreveu para %s às %s.',
+                $agendamento->equipe,
+                $this->formatDay($agendamento->dia),
+                $agendamento->horario
+            )
+            : sprintf(
+                '%s cancelou %s às %s. Motivo: %s',
+                $agendamento->equipe,
+                $this->formatDay($agendamento->dia),
+                $agendamento->horario,
+                $agendamento->motivo_cancelamento ?: 'Não informado'
+            );
+
+        try {
+            AdminNotification::create([
+                'agendamento_id' => $agendamento->id,
+                'type' => $type,
+                'title' => $title,
+                'message' => $message,
+            ]);
+        } catch (\Throwable $exception) {
+            Log::warning('Admin site notification was not registered.', [
+                'message' => $exception->getMessage(),
+            ]);
+        }
+    }
+
+    private function formatDay(string $day): string
+    {
+        return [
+            'sexta' => 'sexta-feira',
+            'sabado' => 'sábado',
+            'domingo' => 'domingo',
+        ][$day] ?? $day;
     }
 }
