@@ -117,7 +117,7 @@
                         <th>Responsável</th>
                         <th>Telefone</th>
                         <th>Status</th>
-                        <th>Motivo</th>
+                        <th>Motivos</th>
                     </tr>
                 </thead>
                 <tbody>
