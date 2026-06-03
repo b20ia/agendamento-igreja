@@ -29,6 +29,8 @@ class SistemaAgendamento {
             horario: null
         };
 
+        this.userNotifications = [];
+
         // Armazena dados do cancelamento atual
         this.cancelamentoAtual = {
             id: null,
@@ -45,6 +47,7 @@ class SistemaAgendamento {
     // =============================================
 
     inicializar() {
+        this.carregarNotificacoesUsuario();
         this.configurarEventos();
         this.renderizarEstadoHorarios('Carregando horários...');
 
@@ -53,11 +56,139 @@ class SistemaAgendamento {
             .catch(() => this.renderizarEstadoHorarios('Não foi possível carregar os horários. Tente atualizar a página.', 'erro'));
     }
 
+    carregarNotificacoesUsuario() {
+        try {
+            const saved = localStorage.getItem('siteUserNotifications');
+            this.userNotifications = saved ? JSON.parse(saved) : [];
+        } catch (error) {
+            this.userNotifications = [];
+        }
+
+        this.renderizarNotificacoesUsuario();
+    }
+
+    salvarNotificacoesUsuario() {
+        try {
+            localStorage.setItem('siteUserNotifications', JSON.stringify(this.userNotifications));
+        } catch (error) {
+            console.warn('Não foi possível salvar as notificações do usuário localmente.', error);
+        }
+    }
+
+    adicionarNotificacaoUsuario(type, title, message) {
+        const notificacao = {
+            id: `${Date.now()}-${Math.random()}`,
+            type,
+            title,
+            message,
+            createdAt: new Date().toISOString(),
+        };
+
+        this.userNotifications.unshift(notificacao);
+        this.userNotifications = this.userNotifications.slice(0, 6);
+        this.salvarNotificacoesUsuario();
+        this.renderizarNotificacoesUsuario();
+    }
+
+    renderizarNotificacoesUsuario() {
+        const list = document.getElementById('userNotificationsList');
+        const count = document.getElementById('userNotificationsCount');
+        const dropdown = document.getElementById('userNotificationsDropdown');
+        if (!list || !count || !dropdown) return;
+
+        const notificationCount = this.userNotifications.length;
+        count.textContent = notificationCount;
+        count.style.display = notificationCount > 0 ? 'inline-flex' : 'none';
+
+        if (notificationCount === 0) {
+            list.innerHTML = '<p class="bell-dropdown-empty">Nenhuma notificação ainda.</p>';
+        } else {
+            list.innerHTML = this.userNotifications.map((notification) => `
+                <article class="bell-notification-item ${notification.type}" data-notification-id="${notification.id}" style="cursor: pointer;">
+                    <strong>${this.escaparHtml(notification.title)}</strong>
+                    <p>${this.escaparHtml(notification.message)}</p>
+                    <span class="bell-notification-time">${new Date(notification.createdAt).toLocaleString('pt-BR', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    })}</span>
+                </article>
+            `).join('');
+
+            // Adiciona eventos de clique às notificações
+            list.querySelectorAll('.bell-notification-item').forEach((item) => {
+                item.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const id = item.getAttribute('data-notification-id');
+                    this.removerNotificacaoUsuario(id);
+                });
+            });
+        }
+
+        dropdown.classList.toggle('vazio', notificationCount === 0);
+    }
+
+    removerNotificacaoUsuario(id) {
+        this.userNotifications = this.userNotifications.filter((n) => n.id !== id);
+        this.salvarNotificacoesUsuario();
+        this.renderizarNotificacoesUsuario();
+    }
+
+    abrirNotificacoesUsuario() {
+        const dropdown = document.getElementById('userNotificationsDropdown');
+        const bell = document.getElementById('userNotificationBell');
+        if (!dropdown || !bell) return;
+
+        const expanded = bell.getAttribute('aria-expanded') === 'true';
+        bell.setAttribute('aria-expanded', String(!expanded));
+        dropdown.setAttribute('aria-hidden', String(expanded));
+        dropdown.classList.toggle('ativo', !expanded);
+    }
+
+    fecharNotificacoesUsuario() {
+        const dropdown = document.getElementById('userNotificationsDropdown');
+        const bell = document.getElementById('userNotificationBell');
+        if (!dropdown || !bell) return;
+
+        bell.setAttribute('aria-expanded', 'false');
+        dropdown.setAttribute('aria-hidden', 'true');
+        dropdown.classList.remove('ativo');
+    }
+
     configurarEventos() {
         // Botões de seleção de dia
         document.querySelectorAll('.dia-btn').forEach((btn) => {
             btn.addEventListener('click', (e) => this.selecionarDia(e));
         });
+
+        const bellButton = document.getElementById('userNotificationBell');
+        const bellClose = document.getElementById('userNotificationsClose');
+
+        if (bellButton) {
+            bellButton.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.abrirNotificacoesUsuario();
+            });
+        }
+
+        if (bellClose) {
+            bellClose.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.fecharNotificacoesUsuario();
+            });
+        }
+
+        document.addEventListener('click', (event) => {
+            const dropdown = document.getElementById('userNotificationsDropdown');
+            const bell = document.getElementById('userNotificationBell');
+            if (!dropdown || !bell || !dropdown.classList.contains('ativo')) return;
+            if (bell.contains(event.target) || dropdown.contains(event.target)) return;
+            this.fecharNotificacoesUsuario();
+        });
+
+        
 
         // Modal de agendamento
         document.getElementById('btnCancelar').addEventListener('click', () => this.fecharModalAgendamento());
@@ -240,6 +371,8 @@ class SistemaAgendamento {
             || (agora >= domingoAbertura && agora < domingoFechamento);
     }
 
+    
+
     // =============================================
     // MODAL DE AGENDAMENTO
     // =============================================
@@ -356,6 +489,7 @@ class SistemaAgendamento {
 
                 if (result.sucesso) {
                     this.mostrarMensagem(result.mensagem, 'sucesso');
+                    this.adicionarNotificacaoUsuario('booking', 'Agendamento confirmado', result.mensagem);
 
                     // Atualizar agendamentos
                     setTimeout(() => {
@@ -408,7 +542,8 @@ class SistemaAgendamento {
 
                 if (result.sucesso) {
                     this.mostrarMensagemCancelamento(result.mensagem, 'sucesso');
-                    
+                    this.adicionarNotificacaoUsuario('cancellation', 'Inscrição cancelada', result.mensagem);
+
                     // Atualizar agendamentos
                     setTimeout(() => {
                         this.carregarAgendamentos(this.cancelamentoAtual.dia);
@@ -544,6 +679,7 @@ class SistemaAgendamento {
                                 ...(agendamento.notificacoes_enviadas || {}),
                                 proximidade: new Date().toISOString(),
                             };
+                            this.adicionarNotificacaoUsuario('proximidade', 'Lembrete de proximidade', `Seu horário para ${this.escaparHtml(agendamento.equipe)} às ${agendamento.horario} está próximo.`);
                         } else {
                             this.notificacoesProximidadePendentes.delete(agendamento.id);
                         }

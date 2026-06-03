@@ -21,7 +21,9 @@ class AgendamentoController extends Controller
     public function index()
     {
         $dias = ['sexta', 'sabado', 'domingo'];
-        return view('agendamento.index', compact('dias'));
+        $equipesPadrao = config('agendamento.equipes', []);
+
+        return view('agendamento.index', compact('dias', 'equipesPadrao'));
     }
 
     /**
@@ -79,17 +81,15 @@ class AgendamentoController extends Controller
         );
 
         if ($agendamento) {
-            if ($this->whatsApp->sendConfirmation($agendamento)) {
-                $agendamento->registrarNotificacao('confirmacao');
-            }
+            $this->whatsApp->sendConfirmation($agendamento);
+            $agendamento->registrarNotificacao('confirmacao');
 
-            $this->whatsApp->sendAdminBookingNotification($agendamento);
             $this->createAdminNotification($agendamento, 'booking');
 
             return response()->json([
                 'sucesso' => true,
                 'mensagem' => 'Agendamento realizado com sucesso!',
-                'agendamento' => $agendamento,
+                'agendamento' => $agendamento->fresh(),
             ]);
         }
 
@@ -120,17 +120,15 @@ class AgendamentoController extends Controller
 
         $agendamento->cancelar($validated['motivo']);
 
-        if ($this->whatsApp->sendCancellation($agendamento)) {
-            $agendamento->registrarNotificacao('cancelamento');
-        }
+        $this->whatsApp->sendCancellation($agendamento);
+        $agendamento->registrarNotificacao('cancelamento');
 
-        $this->whatsApp->sendAdminCancellationNotification($agendamento);
         $this->createAdminNotification($agendamento, 'cancellation');
 
         return response()->json([
             'sucesso' => true,
             'mensagem' => 'Agendamento cancelado com sucesso!',
-            'agendamento' => $agendamento,
+            'agendamento' => $agendamento->fresh(),
         ]);
     }
 

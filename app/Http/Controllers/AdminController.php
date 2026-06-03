@@ -40,23 +40,60 @@ class AdminController extends Controller
         return redirect()->route('admin.index');
     }
 
-    public function index(): View|RedirectResponse
+    public function index(Request $request): View|RedirectResponse
     {
         if (!$this->isAuthenticated()) {
             return redirect()->route('admin.login');
         }
 
-        $agendamentos = Agendamento::orderByRaw("CASE dia WHEN 'sexta' THEN 1 WHEN 'sabado' THEN 2 WHEN 'domingo' THEN 3 ELSE 4 END")
+        $search = trim($request->query('q', ''));
+        $filtroDia = trim($request->query('dia', ''));
+        $filtroStatus = trim($request->query('status', ''));
+        $equipe = trim($request->query('equipe', ''));
+
+        $allAgendamentos = Agendamento::orderByRaw("CASE dia WHEN 'sexta' THEN 1 WHEN 'sabado' THEN 2 WHEN 'domingo' THEN 3 ELSE 4 END")
             ->orderBy('horario')
             ->get();
 
+        $agendamentosQuery = Agendamento::orderByRaw("CASE dia WHEN 'sexta' THEN 1 WHEN 'sabado' THEN 2 WHEN 'domingo' THEN 3 ELSE 4 END")
+            ->orderBy('horario');
+
+        if ($filtroDia !== '') {
+            $agendamentosQuery->where('dia', $filtroDia);
+        }
+
+        if ($search !== '') {
+            $agendamentosQuery->where(function ($query) use ($search) {
+                $query->where('dia', 'like', "%{$search}%")
+                    ->orWhere('horario', 'like', "%{$search}%")
+                    ->orWhere('equipe', 'like', "%{$search}%")
+                    ->orWhere('responsavel', 'like', "%{$search}%")
+                    ->orWhere('telefone', 'like', "%{$search}%")
+                    ->orWhere('motivo_cancelamento', 'like', "%{$search}%");
+            });
+        }
+
+        if ($equipe !== '') {
+            $agendamentosQuery->where('equipe', 'like', "%{$equipe}%");
+        }
+
+        if ($filtroStatus === 'ativos') {
+            $agendamentosQuery->where('status', 'ocupado')->where('cancelado', false);
+        } elseif ($filtroStatus === 'cancelados') {
+            $agendamentosQuery->where('cancelado', true);
+        } elseif ($filtroStatus === 'livres') {
+            $agendamentosQuery->where('status', 'livre')->where('cancelado', false);
+        }
+
+        $agendamentos = $agendamentosQuery->get();
+
         $resumo = [
-            'total' => $agendamentos->count(),
-            'ativos' => $agendamentos->where('status', 'ocupado')->where('cancelado', false)->count(),
-            'cancelados' => $agendamentos->where('cancelado', true)->count(),
-            'sexta' => $agendamentos->where('dia', 'sexta')->where('status', 'ocupado')->where('cancelado', false)->count(),
-            'sabado' => $agendamentos->where('dia', 'sabado')->where('status', 'ocupado')->where('cancelado', false)->count(),
-            'domingo' => $agendamentos->where('dia', 'domingo')->where('status', 'ocupado')->where('cancelado', false)->count(),
+            'total' => $allAgendamentos->count(),
+            'ativos' => $allAgendamentos->where('status', 'ocupado')->where('cancelado', false)->count(),
+            'cancelados' => $allAgendamentos->where('cancelado', true)->count(),
+            'sexta' => $allAgendamentos->where('dia', 'sexta')->where('status', 'ocupado')->where('cancelado', false)->count(),
+            'sabado' => $allAgendamentos->where('dia', 'sabado')->where('status', 'ocupado')->where('cancelado', false)->count(),
+            'domingo' => $allAgendamentos->where('dia', 'domingo')->where('status', 'ocupado')->where('cancelado', false)->count(),
         ];
 
         try {
@@ -71,7 +108,83 @@ class AdminController extends Controller
             $unreadNotifications = 0;
         }
 
-        return view('admin.index', compact('agendamentos', 'resumo', 'notifications', 'unreadNotifications'));
+        return view('admin.index', compact(
+            'agendamentos',
+            'resumo',
+            'notifications',
+            'unreadNotifications',
+            'search',
+            'filtroDia',
+            'filtroStatus',
+            'equipe'
+        ));
+    }
+
+    public function exportAgendamentos(Request $request)
+    {
+        if (!$this->isAuthenticated()) {
+            return redirect()->route('admin.login');
+        }
+
+        $search = trim($request->query('q', ''));
+        $filtroDia = trim($request->query('dia', ''));
+        $filtroStatus = trim($request->query('status', ''));
+        $equipe = trim($request->query('equipe', ''));
+
+        $agendamentosQuery = Agendamento::orderByRaw("CASE dia WHEN 'sexta' THEN 1 WHEN 'sabado' THEN 2 WHEN 'domingo' THEN 3 ELSE 4 END")
+            ->orderBy('horario');
+
+        if ($filtroDia !== '') {
+            $agendamentosQuery->where('dia', $filtroDia);
+        }
+
+        if ($search !== '') {
+            $agendamentosQuery->where(function ($query) use ($search) {
+                $query->where('dia', 'like', "%{$search}%")
+                    ->orWhere('horario', 'like', "%{$search}%")
+                    ->orWhere('equipe', 'like', "%{$search}%")
+                    ->orWhere('responsavel', 'like', "%{$search}%")
+                    ->orWhere('telefone', 'like', "%{$search}%")
+                    ->orWhere('motivo_cancelamento', 'like', "%{$search}%");
+            });
+        }
+
+        if ($equipe !== '') {
+            $agendamentosQuery->where('equipe', 'like', "%{$equipe}%");
+        }
+
+        if ($filtroStatus === 'ativos') {
+            $agendamentosQuery->where('status', 'ocupado')->where('cancelado', false);
+        } elseif ($filtroStatus === 'cancelados') {
+            $agendamentosQuery->where('cancelado', true);
+        } elseif ($filtroStatus === 'livres') {
+            $agendamentosQuery->where('status', 'livre')->where('cancelado', false);
+        }
+
+        $agendamentos = $agendamentosQuery->get();
+        $fileName = 'agendamentos_export_' . now()->format('Ymd_His') . '.csv';
+
+        return response()->streamDownload(function () use ($agendamentos) {
+            $handle = fopen('php://output', 'w');
+            fputcsv($handle, ['Dia', 'Horário', 'Equipe', 'Responsável', 'Telefone', 'Status', 'Cancelado', 'Motivo de cancelamento']);
+
+            foreach ($agendamentos as $agendamento) {
+                fputcsv($handle, [
+                    $agendamento->dia,
+                    $agendamento->horario,
+                    $agendamento->equipe,
+                    $agendamento->responsavel,
+                    $agendamento->telefone,
+                    $agendamento->cancelado ? 'Cancelado' : ($agendamento->status === 'ocupado' ? 'Ativo' : 'Livre'),
+                    $agendamento->cancelado ? 'Sim' : 'Não',
+                    $agendamento->motivo_cancelamento ?: '',
+                ]);
+            }
+
+            fclose($handle);
+        }, $fileName, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
     }
 
     public function reports(): View|RedirectResponse
@@ -130,6 +243,27 @@ class AdminController extends Controller
         $settings = ['whatsapp_admin_phone' => $adminPhone];
 
         return view('admin.settings', compact('settings'));
+    }
+
+    public function notifications(): View|RedirectResponse
+    {
+        if (!$this->isAuthenticated()) {
+            return redirect()->route('admin.login');
+        }
+
+        try {
+            $notifications = AdminNotification::latest()->get();
+            $unreadNotifications = AdminNotification::whereNull('read_at')->count();
+        } catch (\Throwable $exception) {
+            Log::warning('Admin notifications could not be loaded.', [
+                'message' => $exception->getMessage(),
+            ]);
+
+            $notifications = collect();
+            $unreadNotifications = 0;
+        }
+
+        return view('admin.notifications', compact('notifications', 'unreadNotifications'));
     }
 
     public function updateSettings(Request $request): RedirectResponse

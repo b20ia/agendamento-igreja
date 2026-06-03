@@ -29,6 +29,25 @@
         </div>
     </section>
 
+    @section('headerExtras')
+        <div class="bell-notifications">
+            <button id="userNotificationBell" type="button" class="bell-button" aria-expanded="false" aria-label="Abrir notificações">
+                <span class="bell-icon" aria-hidden="true">🔔</span>
+                <span id="userNotificationsCount" class="bell-badge" aria-live="polite">0</span>
+            </button>
+
+            <div id="userNotificationsDropdown" class="bell-dropdown" aria-hidden="true">
+                <div class="bell-dropdown-header">
+                    <strong>Notificações</strong>
+                    <button type="button" id="userNotificationsClose" class="bell-close" aria-label="Fechar notificações">&times;</button>
+                </div>
+                <div id="userNotificationsList" class="bell-dropdown-list">
+                    <p class="bell-dropdown-empty">Nenhuma notificação ainda.</p>
+                </div>
+            </div>
+        </div>
+    @endsection
+
     <section class="selector-section">
         <p class="label-dia">Selecione o dia:</p>
         <div class="dias-container">

@@ -11,6 +11,8 @@ Route::get('/admin/login', [AdminController::class, 'login'])->name('admin.login
 Route::post('/admin/login', [AdminController::class, 'authenticate'])->name('admin.authenticate');
 Route::post('/admin/logout', [AdminController::class, 'logout'])->name('admin.logout');
 Route::get('/admin', [AdminController::class, 'index'])->name('admin.index');
+Route::get('/admin/inscricoes/exportar', [AdminController::class, 'exportAgendamentos'])->name('admin.agendamentos.export');
+Route::get('/admin/notificacoes', [AdminController::class, 'notifications'])->name('admin.notifications');
 Route::get('/admin/relatorios', [AdminController::class, 'reports'])->name('admin.reports');
 Route::get('/admin/configuracoes', [AdminController::class, 'settings'])->name('admin.settings');
 Route::post('/admin/configuracoes', [AdminController::class, 'updateSettings'])->name('admin.settings.update');

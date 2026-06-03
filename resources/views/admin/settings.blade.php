@@ -37,7 +37,7 @@
                 </div>
 
                 <div class="admin-setting-note">
-                    Este número recebe os avisos de novas inscrições e cancelamentos pelo WhatsApp.
+                    Este número é opcional. As notificações de novas inscrições e cancelamentos também são mostradas no painel de administração.
                 </div>
 
                 <div class="form-actions">
