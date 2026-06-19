@@ -529,16 +529,20 @@ class SistemaAgendamento {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
                 'X-CSRF-TOKEN': document.querySelector('input[name="_token"]').value,
             },
             body: JSON.stringify(dados),
         })
-            .then((response) => response.json())
-            .then((result) => {
+            .then(async (response) => {
+                const result = await response.json().catch(() => ({}));
+                return { status: response.status, ok: response.ok, result };
+            })
+            .then(({ status, ok, result }) => {
                 btnConfirmar.disabled = false;
                 btnConfirmar.textContent = textoBtnOriginal;
 
-                if (result.sucesso) {
+                if (ok && result.sucesso) {
                     this.mostrarMensagemCancelamento(result.mensagem, 'sucesso');
                     this.adicionarNotificacaoUsuario('cancellation', 'Inscrição cancelada', result.mensagem);
 
@@ -550,7 +554,7 @@ class SistemaAgendamento {
                 } else {
                     const mensagem = result.mensagem
                         || result.message
-                        || 'Não foi possível cancelar. Confira o telefone usado na inscrição e tente novamente.';
+                        || `Não foi possível cancelar (erro ${status}). Confira o telefone usado na inscrição e tente novamente.`;
                     this.mostrarMensagemCancelamento(mensagem, 'erro');
                 }
             })
