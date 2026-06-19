@@ -27,7 +27,10 @@ class AgendamentoController extends Controller
      */
     public function obterPorDia($dia)
     {
-        $agendamentos = Agendamento::where('dia', $dia)->get();
+        // Não expomos telefone/responsável aqui: são dados pessoais e o
+        // telefone é usado como prova de identidade no cancelamento.
+        $agendamentos = Agendamento::where('dia', $dia)
+            ->get(['id', 'dia', 'horario', 'equipe', 'status', 'cancelado']);
 
         return response()->json($agendamentos);
     }
@@ -83,6 +86,7 @@ class AgendamentoController extends Controller
     {
         $validated = $request->validate([
             'id' => 'required|exists:agendamentos,id',
+            'telefone' => 'required|string|max:20',
             'motivo' => 'required|string|max:255',
         ]);
 
@@ -93,6 +97,13 @@ class AgendamentoController extends Controller
                 'sucesso' => false,
                 'mensagem' => 'Agendamento não encontrado ou já foi cancelado.',
             ], 404);
+        }
+
+        if (!$this->telefonesConferem($validated['telefone'], $agendamento->telefone)) {
+            return response()->json([
+                'sucesso' => false,
+                'mensagem' => 'O telefone informado não confere com o usado na inscrição.',
+            ], 422);
         }
 
         $agendamento->cancelar($validated['motivo']);
@@ -139,6 +150,20 @@ class AgendamentoController extends Controller
         }
 
         return false;
+    }
+
+    /**
+     * Compara o telefone informado no cancelamento com o usado na inscrição,
+     * considerando apenas os dígitos (ignora parênteses, espaços e traços).
+     */
+    private function telefonesConferem(string $informado, ?string $cadastrado): bool
+    {
+        $apenasDigitos = static fn ($valor) => preg_replace('/\D/', '', (string) $valor);
+
+        $informado = $apenasDigitos($informado);
+        $cadastrado = $apenasDigitos($cadastrado);
+
+        return $informado !== '' && $informado === $cadastrado;
     }
 
     private function createAdminNotification(Agendamento $agendamento, string $type): void

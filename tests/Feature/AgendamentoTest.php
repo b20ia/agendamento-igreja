@@ -88,6 +88,7 @@ class AgendamentoTest extends TestCase
 
         $cancelar = $this->postJson(route('agendamento.cancelar'), [
             'id' => $agendamento->id,
+            'telefone' => '85999999999',
             'motivo' => 'Imprevisto',
         ]);
 
@@ -100,6 +101,38 @@ class AgendamentoTest extends TestCase
         ]));
 
         $reagendar->assertOk()->assertJson(['sucesso' => true]);
+    }
+
+    public function test_nao_cancela_com_telefone_diferente(): void
+    {
+        $this->postJson(route('agendamento.agendar'), $this->payload());
+        $agendamento = Agendamento::first();
+
+        $cancelar = $this->postJson(route('agendamento.cancelar'), [
+            'id' => $agendamento->id,
+            'telefone' => '85988888888',
+            'motivo' => 'Tentativa indevida',
+        ]);
+
+        $cancelar->assertStatus(422)->assertJson(['sucesso' => false]);
+
+        // A inscrição continua ativa.
+        $this->assertSame('ocupado', $agendamento->fresh()->status);
+    }
+
+    public function test_cancela_com_telefone_formatado_diferente(): void
+    {
+        $this->postJson(route('agendamento.agendar'), $this->payload());
+        $agendamento = Agendamento::first();
+
+        // Mesmo telefone, mas com máscara — deve conferir só pelos dígitos.
+        $cancelar = $this->postJson(route('agendamento.cancelar'), [
+            'id' => $agendamento->id,
+            'telefone' => '(85) 99999-9999',
+            'motivo' => 'Imprevisto',
+        ]);
+
+        $cancelar->assertOk()->assertJson(['sucesso' => true]);
     }
 
     public function test_agendamentos_fechados_fora_da_janela(): void

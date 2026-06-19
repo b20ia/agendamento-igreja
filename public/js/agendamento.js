@@ -418,6 +418,7 @@ class SistemaAgendamento {
         document.getElementById('diaAgendamentoCancelamento').value = this.diasNomes[agendamento.dia];
         document.getElementById('horarioAgendamentoCancelamento').value = agendamento.horario;
         document.getElementById('equipeAgendamentoCancelamento').value = agendamento.equipe;
+        document.getElementById('telefoneCancelamento').value = '';
         document.getElementById('motivoCancelamento').value = '';
 
         // Limpar mensagem de feedback
@@ -517,6 +518,7 @@ class SistemaAgendamento {
 
         const dados = {
             id: this.cancelamentoAtual.id,
+            telefone: document.getElementById('telefoneCancelamento').value,
             motivo: document.getElementById('motivoCancelamento').value,
         };
 
@@ -656,13 +658,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // Iniciar atualização em tempo real
     sistema.iniciarAtualizacaoEmTempoReal();
 
-    // Formatação de telefone
-    const inputTelefone = document.getElementById('telefonePessoa');
-    if (inputTelefone) {
-        inputTelefone.addEventListener('input', (e) => {
-            e.target.value = formatarTelefone(e.target.value);
-        });
-    }
+    // Formatação de telefone (inscrição e cancelamento)
+    ['telefonePessoa', 'telefoneCancelamento'].forEach((id) => {
+        const inputTelefone = document.getElementById(id);
+        if (inputTelefone) {
+            inputTelefone.addEventListener('input', (e) => {
+                e.target.value = formatarTelefone(e.target.value);
+            });
+        }
+    });
 
     // Fechar modal ao pressionar ESC
     document.addEventListener('keydown', (e) => {

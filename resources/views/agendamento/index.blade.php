@@ -164,6 +164,19 @@
                 </div>
 
                 <div class="form-group">
+                    <label for="telefoneCancelamento">Telefone usado na inscrição *</label>
+                    <input
+                        type="tel"
+                        id="telefoneCancelamento"
+                        name="telefone"
+                        class="form-input"
+                        placeholder="Ex: (11) 99999-9999"
+                        pattern="\([0-9]{2}\) [0-9]{4,5}-[0-9]{4}"
+                        required
+                    >
+                </div>
+
+                <div class="form-group">
                     <label for="motivoCancelamento">Por que está desistindo? *</label>
                     <textarea
                         id="motivoCancelamento"
