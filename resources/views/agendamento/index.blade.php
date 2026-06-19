@@ -200,5 +200,5 @@
 
     <div id="modalOverlay" class="modal-overlay"></div>
 
-    <script src="{{ asset('js/agendamento.js') }}"></script>
+    <script src="{{ asset('js/agendamento.js') }}?v={{ filemtime(public_path('js/agendamento.js')) }}"></script>
 @endsection

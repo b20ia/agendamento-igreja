@@ -491,7 +491,10 @@ class SistemaAgendamento {
                         this.fecharModalAgendamento();
                     }, 1500);
                 } else {
-                    this.mostrarMensagem(result.mensagem, 'erro');
+                    const mensagem = result.mensagem
+                        || result.message
+                        || 'Não foi possível concluir o agendamento. Confira os dados e tente novamente.';
+                    this.mostrarMensagem(mensagem, 'erro');
                 }
             })
             .catch((error) => {
@@ -545,7 +548,10 @@ class SistemaAgendamento {
                         this.fecharModalCancelamento();
                     }, 1500);
                 } else {
-                    this.mostrarMensagemCancelamento(result.mensagem, 'erro');
+                    const mensagem = result.mensagem
+                        || result.message
+                        || 'Não foi possível cancelar. Confira o telefone usado na inscrição e tente novamente.';
+                    this.mostrarMensagemCancelamento(mensagem, 'erro');
                 }
             })
             .catch((error) => {
