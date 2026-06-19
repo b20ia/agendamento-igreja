@@ -8,19 +8,12 @@ class SistemaAgendamento {
         this.horariosDisponiveis = {};
         this.agendamentos = {};
         this.horariosCarregados = false;
-        this.notificacoesProximidadePendentes = new Set();
-        
+
         // Mapping de dias para português
         this.diasNomes = {
             'sexta': 'Sexta-feira',
             'sabado': 'Sábado',
             'domingo': 'Domingo'
-        };
-
-        this.datasEvento = {
-            'sexta': '2026-07-24',
-            'sabado': '2026-07-25',
-            'domingo': '2026-07-26'
         };
 
         // Armazena dados do agendamento atual
@@ -630,82 +623,6 @@ class SistemaAgendamento {
         }, 5000);
     }
 
-    // =============================================
-    // NOTIFICAÇÃO DE PROXIMIDADE
-    // =============================================
-
-    iniciarVerificacaoProximidade() {
-        // Verificar a cada 30 segundos se há agendamentos próximos
-        setInterval(() => {
-            this.verificarAgendamentosProximos();
-        }, 30000);
-    }
-
-    verificarAgendamentosProximos() {
-        const agora = new Date();
-        const diaAtual = this.obterDiaAtual();
-
-        if (!diaAtual || !this.agendamentos[diaAtual]) return;
-
-        this.agendamentos[diaAtual].forEach((agendamento) => {
-            if (agendamento.cancelado || agendamento.notificacoes_enviadas?.proximidade) return;
-            if (this.notificacoesProximidadePendentes.has(agendamento.id)) return;
-
-            const [horas, minutos] = agendamento.horario.split(':');
-            const [ano, mes, dia] = this.datasEvento[diaAtual].split('-').map(Number);
-            const agendamentoTime = new Date(ano, mes - 1, dia, parseInt(horas), parseInt(minutos), 0);
-
-            const diferenca = (agendamentoTime - agora) / 1000 / 60; // em minutos
-
-            // Se está entre 10 e 15 minutos antes
-            if (diferenca > 10 && diferenca <= 15) {
-                this.notificacoesProximidadePendentes.add(agendamento.id);
-
-                // Enviar notificação de proximidade via API
-                fetch('/api/notificacao-proximidade', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('input[name="_token"]').value,
-                    },
-                    body: JSON.stringify({
-                        id: agendamento.id,
-                    }),
-                })
-                    .then((response) => response.json())
-                    .then((result) => {
-                        if (result.sucesso) {
-                            agendamento.notificacoes_enviadas = {
-                                ...(agendamento.notificacoes_enviadas || {}),
-                                proximidade: new Date().toISOString(),
-                            };
-                            this.adicionarNotificacaoUsuario('proximidade', 'Lembrete de proximidade', `Seu horário para ${this.escaparHtml(agendamento.equipe)} às ${agendamento.horario} está próximo.`);
-                        } else {
-                            this.notificacoesProximidadePendentes.delete(agendamento.id);
-                        }
-                    })
-                    .catch((error) => {
-                        this.notificacoesProximidadePendentes.delete(agendamento.id);
-                        console.error('Erro ao enviar notificação de proximidade:', error);
-                    });
-            }
-        });
-    }
-
-    obterDiaAtual() {
-        const hoje = new Date();
-        const ano = hoje.getFullYear();
-        const mes = String(hoje.getMonth() + 1).padStart(2, '0');
-        const dia = String(hoje.getDate()).padStart(2, '0');
-        const dataAtual = `${ano}-${mes}-${dia}`;
-
-        if (dataAtual === this.datasEvento.sexta) return 'sexta';
-        if (dataAtual === this.datasEvento.sabado) return 'sabado';
-        if (dataAtual === this.datasEvento.domingo) return 'domingo';
-
-        return null;
-    }
-
 }
 
 // =============================================
@@ -738,9 +655,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Iniciar atualização em tempo real
     sistema.iniciarAtualizacaoEmTempoReal();
-
-    // Iniciar verificação de proximidade
-    sistema.iniciarVerificacaoProximidade();
 
     // Formatação de telefone
     const inputTelefone = document.getElementById('telefonePessoa');

@@ -51,41 +51,9 @@ class AdminController extends Controller
         $filtroStatus = trim($request->query('status', ''));
         $equipe = trim($request->query('equipe', ''));
 
-        $allAgendamentos = Agendamento::orderByRaw("CASE dia WHEN 'sexta' THEN 1 WHEN 'sabado' THEN 2 WHEN 'domingo' THEN 3 ELSE 4 END")
-            ->orderBy('horario')
-            ->get();
+        $allAgendamentos = $this->baseQuery()->get();
 
-        $agendamentosQuery = Agendamento::orderByRaw("CASE dia WHEN 'sexta' THEN 1 WHEN 'sabado' THEN 2 WHEN 'domingo' THEN 3 ELSE 4 END")
-            ->orderBy('horario');
-
-        if ($filtroDia !== '') {
-            $agendamentosQuery->where('dia', $filtroDia);
-        }
-
-        if ($search !== '') {
-            $agendamentosQuery->where(function ($query) use ($search) {
-                $query->where('dia', 'like', "%{$search}%")
-                    ->orWhere('horario', 'like', "%{$search}%")
-                    ->orWhere('equipe', 'like', "%{$search}%")
-                    ->orWhere('responsavel', 'like', "%{$search}%")
-                    ->orWhere('telefone', 'like', "%{$search}%")
-                    ->orWhere('motivo_cancelamento', 'like', "%{$search}%");
-            });
-        }
-
-        if ($equipe !== '') {
-            $agendamentosQuery->where('equipe', 'like', "%{$equipe}%");
-        }
-
-        if ($filtroStatus === 'ativos') {
-            $agendamentosQuery->where('status', 'ocupado')->where('cancelado', false);
-        } elseif ($filtroStatus === 'cancelados') {
-            $agendamentosQuery->where('cancelado', true);
-        } elseif ($filtroStatus === 'livres') {
-            $agendamentosQuery->where('status', 'livre')->where('cancelado', false);
-        }
-
-        $agendamentos = $agendamentosQuery->get();
+        $agendamentos = $this->filteredQuery($request)->get();
 
         $resumo = [
             'total' => $allAgendamentos->count(),
@@ -126,42 +94,7 @@ class AdminController extends Controller
             return redirect()->route('admin.login');
         }
 
-        $search = trim($request->query('q', ''));
-        $filtroDia = trim($request->query('dia', ''));
-        $filtroStatus = trim($request->query('status', ''));
-        $equipe = trim($request->query('equipe', ''));
-
-        $agendamentosQuery = Agendamento::orderByRaw("CASE dia WHEN 'sexta' THEN 1 WHEN 'sabado' THEN 2 WHEN 'domingo' THEN 3 ELSE 4 END")
-            ->orderBy('horario');
-
-        if ($filtroDia !== '') {
-            $agendamentosQuery->where('dia', $filtroDia);
-        }
-
-        if ($search !== '') {
-            $agendamentosQuery->where(function ($query) use ($search) {
-                $query->where('dia', 'like', "%{$search}%")
-                    ->orWhere('horario', 'like', "%{$search}%")
-                    ->orWhere('equipe', 'like', "%{$search}%")
-                    ->orWhere('responsavel', 'like', "%{$search}%")
-                    ->orWhere('telefone', 'like', "%{$search}%")
-                    ->orWhere('motivo_cancelamento', 'like', "%{$search}%");
-            });
-        }
-
-        if ($equipe !== '') {
-            $agendamentosQuery->where('equipe', 'like', "%{$equipe}%");
-        }
-
-        if ($filtroStatus === 'ativos') {
-            $agendamentosQuery->where('status', 'ocupado')->where('cancelado', false);
-        } elseif ($filtroStatus === 'cancelados') {
-            $agendamentosQuery->where('cancelado', true);
-        } elseif ($filtroStatus === 'livres') {
-            $agendamentosQuery->where('status', 'livre')->where('cancelado', false);
-        }
-
-        $agendamentos = $agendamentosQuery->get();
+        $agendamentos = $this->filteredQuery($request)->get();
         $fileName = 'agendamentos_export_' . now()->format('Ymd_His') . '.csv';
 
         return response()->streamDownload(function () use ($agendamentos) {
@@ -193,9 +126,7 @@ class AdminController extends Controller
             return redirect()->route('admin.login');
         }
 
-        $agendamentos = Agendamento::orderByRaw("CASE dia WHEN 'sexta' THEN 1 WHEN 'sabado' THEN 2 WHEN 'domingo' THEN 3 ELSE 4 END")
-            ->orderBy('horario')
-            ->get();
+        $agendamentos = $this->baseQuery()->get();
 
         $ativos = $agendamentos->where('status', 'ocupado')->where('cancelado', false);
         $cancelados = $agendamentos->where('cancelado', true);
@@ -318,5 +249,56 @@ class AdminController extends Controller
     private function isAuthenticated(): bool
     {
         return (bool) session('admin_authenticated');
+    }
+
+    /**
+     * Query base de agendamentos ordenada por dia e horário.
+     */
+    private function baseQuery()
+    {
+        return Agendamento::orderByRaw("CASE dia WHEN 'sexta' THEN 1 WHEN 'sabado' THEN 2 WHEN 'domingo' THEN 3 ELSE 4 END")
+            ->orderBy('horario');
+    }
+
+    /**
+     * Aplica os filtros de busca da tela de admin (busca, dia, equipe, status).
+     */
+    private function filteredQuery(Request $request)
+    {
+        $search = trim($request->query('q', ''));
+        $filtroDia = trim($request->query('dia', ''));
+        $filtroStatus = trim($request->query('status', ''));
+        $equipe = trim($request->query('equipe', ''));
+
+        $query = $this->baseQuery();
+
+        if ($filtroDia !== '') {
+            $query->where('dia', $filtroDia);
+        }
+
+        if ($search !== '') {
+            $query->where(function ($query) use ($search) {
+                $query->where('dia', 'like', "%{$search}%")
+                    ->orWhere('horario', 'like', "%{$search}%")
+                    ->orWhere('equipe', 'like', "%{$search}%")
+                    ->orWhere('responsavel', 'like', "%{$search}%")
+                    ->orWhere('telefone', 'like', "%{$search}%")
+                    ->orWhere('motivo_cancelamento', 'like', "%{$search}%");
+            });
+        }
+
+        if ($equipe !== '') {
+            $query->where('equipe', 'like', "%{$equipe}%");
+        }
+
+        if ($filtroStatus === 'ativos') {
+            $query->where('status', 'ocupado')->where('cancelado', false);
+        } elseif ($filtroStatus === 'cancelados') {
+            $query->where('cancelado', true);
+        } elseif ($filtroStatus === 'livres') {
+            $query->where('status', 'livre')->where('cancelado', false);
+        }
+
+        return $query;
     }
 }

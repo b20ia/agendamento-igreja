@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use App\Exceptions\AgendamentoIndisponivelException;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 
 class Agendamento extends Model
 {
@@ -63,7 +65,7 @@ class Agendamento extends Model
     {
         $equipeNormalizada = self::normalizarNomeEquipe($equipe);
 
-        return self::where('status', 'ocupado')
+        return self::ocupados()
             ->where('cancelado', false)
             ->get()
             ->contains(function ($agendamento) use ($equipeNormalizada) {
@@ -80,45 +82,57 @@ class Agendamento extends Model
     }
 
     /**
-     * Reserva um horário
+     * Reserva um horário de forma atômica.
+     *
+     * Toda a verificação (equipe já agendada + disponibilidade do horário)
+     * acontece dentro de uma transação com lock na linha do horário, para que
+     * dois pedidos simultâneos não consigam reservar o mesmo slot.
+     *
+     * @throws AgendamentoIndisponivelException quando o horário ou a equipe estão indisponíveis.
      */
     public static function reservar($dia, $horario, $equipe, $responsavel, $telefone)
     {
-        // Verificar disponibilidade
-        if (!self::verificarDisponibilidade($dia, $horario)) {
-            return null;
-        }
+        return DB::transaction(function () use ($dia, $horario, $equipe, $responsavel, $telefone) {
+            $equipeNormalizada = self::normalizarNomeEquipe($equipe);
 
-        // Procura se já existe um registro
-        $agendamento = self::where('dia', $dia)
-            ->where('horario', $horario)
-            ->first();
+            // A equipe já tem um agendamento ativo em qualquer horário?
+            $equipeAtiva = self::where('status', 'ocupado')
+                ->where('cancelado', false)
+                ->lockForUpdate()
+                ->get()
+                ->contains(fn ($a) => self::normalizarNomeEquipe($a->equipe) === $equipeNormalizada);
 
-        if ($agendamento) {
-            // Atualiza registra existente
-            $agendamento->update([
+            if ($equipeAtiva) {
+                throw AgendamentoIndisponivelException::equipeJaAgendada();
+            }
+
+            // Trava a linha do horário (se existir) para serializar pedidos concorrentes.
+            $agendamento = self::where('dia', $dia)
+                ->where('horario', $horario)
+                ->lockForUpdate()
+                ->first();
+
+            if ($agendamento && $agendamento->status === 'ocupado' && !$agendamento->cancelado) {
+                throw AgendamentoIndisponivelException::horarioOcupado();
+            }
+
+            $dados = [
                 'equipe' => $equipe,
                 'responsavel' => $responsavel,
                 'telefone' => $telefone,
                 'status' => 'ocupado',
                 'cancelado' => false,
                 'motivo_cancelamento' => null,
-            ]);
-        } else {
-            // Cria novo registro
-            $agendamento = self::create([
-                'dia' => $dia,
-                'horario' => $horario,
-                'equipe' => $equipe,
-                'responsavel' => $responsavel,
-                'telefone' => $telefone,
-                'status' => 'ocupado',
-                'cancelado' => false,
-                'motivo_cancelamento' => null,
-            ]);
-        }
+            ];
 
-        return $agendamento;
+            if ($agendamento) {
+                $agendamento->update($dados);
+
+                return $agendamento;
+            }
+
+            return self::create(array_merge(['dia' => $dia, 'horario' => $horario], $dados));
+        });
     }
 
     /**
@@ -149,14 +163,5 @@ class Agendamento extends Model
         $notificacoes[$tipo] = now()->toIso8601String();
         
         $this->update(['notificacoes_enviadas' => $notificacoes]);
-    }
-
-    /**
-     * Verifica se uma notificação já foi enviada
-     */
-    public function notificacaoJaEnviada($tipo)
-    {
-        $notificacoes = $this->notificacoes_enviadas ?? [];
-        return isset($notificacoes[$tipo]);
     }
 }

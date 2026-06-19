@@ -8,7 +8,9 @@ Route::redirect('/', '/agendamento');
 Route::get('/agendamento', [AgendamentoController::class, 'index'])->name('agendamento.index');
 
 Route::get('/admin/login', [AdminController::class, 'login'])->name('admin.login');
-Route::post('/admin/login', [AdminController::class, 'authenticate'])->name('admin.authenticate');
+Route::post('/admin/login', [AdminController::class, 'authenticate'])
+    ->middleware('throttle:5,1')
+    ->name('admin.authenticate');
 Route::post('/admin/logout', [AdminController::class, 'logout'])->name('admin.logout');
 Route::get('/admin', [AdminController::class, 'index'])->name('admin.index');
 Route::get('/admin/inscricoes/exportar', [AdminController::class, 'exportAgendamentos'])->name('admin.agendamentos.export');
@@ -21,7 +23,8 @@ Route::post('/admin/notificacoes/marcar-lidas', [AdminController::class, 'markNo
 // API AJAX
 Route::get('/api/dia/{dia}', [AgendamentoController::class, 'obterPorDia'])->name('agendamento.por-dia');
 Route::get('/api/horarios', [AgendamentoController::class, 'horarios'])->name('agendamento.horarios');
-Route::post('/api/agendar', [AgendamentoController::class, 'agendar'])->name('agendamento.agendar');
-Route::post('/api/cancelar', [AgendamentoController::class, 'cancelar'])->name('agendamento.cancelar');
-Route::post('/api/registrar-notificacao', [AgendamentoController::class, 'registrarNotificacao'])->name('agendamento.registrar-notificacao');
-Route::post('/api/notificacao-proximidade', [AgendamentoController::class, 'enviarNotificacaoProximidade'])->name('agendamento.notificacao-proximidade');
+
+Route::middleware('throttle:20,1')->group(function () {
+    Route::post('/api/agendar', [AgendamentoController::class, 'agendar'])->name('agendamento.agendar');
+    Route::post('/api/cancelar', [AgendamentoController::class, 'cancelar'])->name('agendamento.cancelar');
+});

@@ -32,16 +32,6 @@ class WhatsAppService
         ));
     }
 
-    public function sendProximityReminder(Agendamento $agendamento): bool
-    {
-        return $this->send($agendamento->telefone, sprintf(
-            "Olá, %s! Lembrete: a equipe %s está agendada para a vigília hoje às %s.",
-            $agendamento->responsavel,
-            $agendamento->equipe,
-            $agendamento->horario
-        ));
-    }
-
     public function sendAdminBookingNotification(Agendamento $agendamento): bool
     {
         return $this->sendToAdmin(sprintf(

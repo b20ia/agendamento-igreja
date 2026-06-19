@@ -2,19 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\AgendamentoIndisponivelException;
 use App\Models\AdminNotification;
 use App\Models\Agendamento;
-use App\Services\WhatsAppService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
 class AgendamentoController extends Controller
 {
-    public function __construct(private readonly WhatsAppService $whatsApp)
-    {
-    }
-
     /**
      * Mostra a página principal
      */
@@ -56,47 +52,28 @@ class AgendamentoController extends Controller
             ], 403);
         }
 
-        if (Agendamento::equipeJaAgendada($validated['equipe'])) {
+        try {
+            $agendamento = Agendamento::reservar(
+                $validated['dia'],
+                $validated['horario'],
+                $validated['equipe'],
+                $validated['responsavel'],
+                $validated['telefone']
+            );
+        } catch (AgendamentoIndisponivelException $exception) {
             return response()->json([
                 'sucesso' => false,
-                'mensagem' => 'Esta equipe já possui um agendamento ativo. Para escolher outro horário, cancele o agendamento atual primeiro.',
+                'mensagem' => $exception->getMessage(),
             ], 409);
         }
 
-        // Verifica disponibilidade do horário
-        if (!Agendamento::verificarDisponibilidade($validated['dia'], $validated['horario'])) {
-            return response()->json([
-                'sucesso' => false,
-                'mensagem' => 'Este horário já foi reservado!',
-            ], 409);
-        }
-
-        // Tenta reservar o horário
-        $agendamento = Agendamento::reservar(
-            $validated['dia'],
-            $validated['horario'],
-            $validated['equipe'],
-            $validated['responsavel'],
-            $validated['telefone']
-        );
-
-        if ($agendamento) {
-            $this->whatsApp->sendConfirmation($agendamento);
-            $agendamento->registrarNotificacao('confirmacao');
-
-            $this->createAdminNotification($agendamento, 'booking');
-
-            return response()->json([
-                'sucesso' => true,
-                'mensagem' => 'Agendamento realizado com sucesso!',
-                'agendamento' => $agendamento->fresh(),
-            ]);
-        }
+        $this->createAdminNotification($agendamento, 'booking');
 
         return response()->json([
-            'sucesso' => false,
-            'mensagem' => 'Erro ao realizar o agendamento.',
-        ], 500);
+            'sucesso' => true,
+            'mensagem' => 'Agendamento realizado com sucesso!',
+            'agendamento' => $agendamento->fresh(),
+        ]);
     }
 
     /**
@@ -120,9 +97,6 @@ class AgendamentoController extends Controller
 
         $agendamento->cancelar($validated['motivo']);
 
-        $this->whatsApp->sendCancellation($agendamento);
-        $agendamento->registrarNotificacao('cancelamento');
-
         $this->createAdminNotification($agendamento, 'cancellation');
 
         return response()->json([
@@ -133,85 +107,11 @@ class AgendamentoController extends Controller
     }
 
     /**
-     * Registra notificação de proximidade (chamado pelo JS)
-     */
-    public function enviarNotificacaoProximidade(Request $request)
-    {
-        $validated = $request->validate([
-            'id' => 'required|exists:agendamentos,id',
-        ]);
-
-        $agendamento = Agendamento::find($validated['id']);
-
-        if (!$agendamento || $agendamento->cancelado) {
-            return response()->json([
-                'sucesso' => false,
-            ], 404);
-        }
-
-        if ($agendamento->notificacaoJaEnviada('proximidade')) {
-            return response()->json([
-                'sucesso' => true,
-                'mensagem' => 'Notificação de proximidade já enviada.',
-            ]);
-        }
-
-        if ($this->whatsApp->sendProximityReminder($agendamento)) {
-            $agendamento->registrarNotificacao('proximidade');
-        }
-
-        return response()->json([
-            'sucesso' => true,
-        ]);
-    }
-
-    /**
-     * Registra notificação enviada (AJAX)
-     */
-    public function registrarNotificacao(Request $request)
-    {
-        $validated = $request->validate([
-            'id' => 'required|exists:agendamentos,id',
-            'tipo' => 'required|in:confirmacao,proximidade,cancelamento',
-        ]);
-
-        $agendamento = Agendamento::find($validated['id']);
-        $agendamento->registrarNotificacao($validated['tipo']);
-
-        return response()->json([
-            'sucesso' => true,
-        ]);
-    }
-
-    /**
      * Retorna os horários disponíveis para um dia
      */
     public function horarios()
     {
-        return response()->json($this->obterHorariosPorDia());
-    }
-
-    /**
-     * Define os horários disponíveis
-     */
-    private function obterHorariosPorDia()
-    {
-        return [
-            'sexta' => [
-                '19:00', '19:30', '20:00', '20:30', '21:00', '21:30'
-            ],
-            'sabado' => [
-                '07:30', '08:00', '08:30', '09:00', '09:30', '10:00',
-                '10:30', '11:00', '11:30', '12:00', '12:30', '13:00',
-                '13:30', '14:00', '14:30', '15:30', '16:00', '16:30',
-                '17:00', '17:30', '18:00'
-            ],
-            'domingo' => [
-                '07:30', '08:00', '08:30', '09:00', '09:30', '10:00',
-                '10:30', '11:00', '11:30', '12:00', '12:30', '13:00',
-                '13:30', '14:00', '14:30', '15:30'
-            ],
-        ];
+        return response()->json(config('agendamento.horarios', []));
     }
 
     /**
@@ -219,19 +119,26 @@ class AgendamentoController extends Controller
      */
     private function agendamentoEstaAberto(): bool
     {
-        $agora = Carbon::now('America/Fortaleza');
+        $timezone = config('agendamento.timezone', 'America/Fortaleza');
+        $agora = Carbon::now($timezone);
 
-        return $agora->lt(Carbon::create(2026, 7, 24, 21, 0, 0, 'America/Fortaleza'))
-            || $agora->between(
-                Carbon::create(2026, 7, 25, 7, 0, 0, 'America/Fortaleza'),
-                Carbon::create(2026, 7, 25, 20, 0, 0, 'America/Fortaleza'),
+        $fechaEm = config('agendamento.abertura.fecha_em');
+
+        if ($fechaEm && $agora->lt(Carbon::parse($fechaEm, $timezone))) {
+            return true;
+        }
+
+        foreach (config('agendamento.abertura.janelas', []) as [$inicio, $fim]) {
+            if ($agora->between(
+                Carbon::parse($inicio, $timezone),
+                Carbon::parse($fim, $timezone),
                 false
-            )
-            || $agora->between(
-                Carbon::create(2026, 7, 26, 7, 0, 0, 'America/Fortaleza'),
-                Carbon::create(2026, 7, 26, 15, 0, 0, 'America/Fortaleza'),
-                false
-            );
+            )) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function createAdminNotification(Agendamento $agendamento, string $type): void
